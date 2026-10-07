@@ -10,7 +10,9 @@ import (
 func NewPostgresDB(databaseURL string) (*gorm.DB, error) {
 	db, err := gorm.Open(
 		postgres.Open(databaseURL),
-		&gorm.Config{},
+		&gorm.Config{
+			TranslateError: true,
+		},
 	)
 	if err != nil {
 		return nil, err

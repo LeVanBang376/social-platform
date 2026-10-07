@@ -2,6 +2,7 @@ package follow
 
 import (
 	"context"
+	"errors"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
@@ -10,6 +11,9 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+var ErrAlreadyFollowing = errors.New("Already following user")
+var ErrNotFollowing = errors.New("Not following user")
 
 type Service struct {
 	db         *gorm.DB
@@ -45,6 +49,10 @@ func (s *Service) Follow(
 		s.db,
 		follow,
 	); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, ErrAlreadyFollowing
+		}
+
 		return nil, err
 	}
 
@@ -63,6 +71,10 @@ func (s *Service) Unfollow(
 		followingID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotFollowing
+		}
+
 		return err
 	}
 

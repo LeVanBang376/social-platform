@@ -22,10 +22,12 @@ import (
 	"social-platform/internal/config"
 	handler "social-platform/internal/handler"
 	"social-platform/internal/middleware"
+	"social-platform/internal/repository/follow"
 	"social-platform/internal/repository/user"
 	"social-platform/internal/repository/user_session"
 	"social-platform/internal/routes"
 	authService "social-platform/internal/service/auth"
+	followService "social-platform/internal/service/follow"
 	userService "social-platform/internal/service/user"
 
 	_ "social-platform/docs"
@@ -89,6 +91,7 @@ func main() {
 
 	userRepo := user.NewRepository()
 	userSessionRepo := user_session.NewRepository()
+	followRepo := follow.NewRepository()
 
 	// ============================================
 	// Services
@@ -106,6 +109,8 @@ func main() {
 		jwtService,
 	)
 
+	followSvc := followService.NewService(database, followRepo)
+
 	// ============================================
 	// Handlers
 	// ============================================
@@ -117,6 +122,8 @@ func main() {
 	authHdl := handler.NewAuthHandler(
 		authSvc,
 	)
+
+	followHdl := handler.NewFollowHandler(followSvc)
 
 	// ============================================
 	// Middleware
@@ -167,12 +174,18 @@ func main() {
 	)
 
 	// User routes
-	users := router.Group("/users")
-	{
-		users.POST("", userHdl.Create)
-		users.GET("/:user_id", userHdl.FindByID)
-		users.PUT("/:user_id", userHdl.Update)
-	}
+	routes.RegisterUserRoutes(
+		router,
+		userHdl,
+		authMiddleware,
+	)
+
+	// Follow routes
+	routes.RegisterFollowRoutes(
+		router,
+		followHdl,
+		authMiddleware,
+	)
 
 	// ============================================
 	// HTTP Server
