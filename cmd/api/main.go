@@ -1,3 +1,12 @@
+// @title           Social Platform APIs
+// @version         1.0
+// @description     Social Platform Backend APIs
+// @host            localhost:8080
+// @BasePath        /
+// @securityDefinitions.apikey CookieAuth
+// @in              cookie
+// @name            access_token
+
 package main
 
 import (
@@ -9,9 +18,20 @@ import (
 	"time"
 
 	"social-platform/infrastructure/db"
+	"social-platform/infrastructure/jwt"
 	"social-platform/internal/config"
+	handler "social-platform/internal/handler"
+	"social-platform/internal/middleware"
+	"social-platform/internal/repository/user"
+	"social-platform/internal/repository/user_session"
+	"social-platform/internal/routes"
+	authService "social-platform/internal/service/auth"
+	userService "social-platform/internal/service/user"
+
+	_ "social-platform/docs"
 
 	"github.com/gin-gonic/gin"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 const (
@@ -58,6 +78,55 @@ func main() {
 	log.Println("Connected to PostgreSQL!")
 
 	// ============================================
+	// Infrastructure
+	// ============================================
+
+	jwtService := jwt.NewJWTService(cfg.JWTSecret)
+
+	// ============================================
+	// Repositories
+	// ============================================
+
+	userRepo := user.NewRepository()
+	userSessionRepo := user_session.NewRepository()
+
+	// ============================================
+	// Services
+	// ============================================
+
+	userSvc := userService.NewService(
+		database,
+		userRepo,
+	)
+
+	authSvc := authService.NewService(
+		database,
+		userRepo,
+		userSessionRepo,
+		jwtService,
+	)
+
+	// ============================================
+	// Handlers
+	// ============================================
+
+	userHdl := handler.NewUserHandler(
+		userSvc,
+	)
+
+	authHdl := handler.NewAuthHandler(
+		authSvc,
+	)
+
+	// ============================================
+	// Middleware
+	// ============================================
+
+	authMiddleware := middleware.Auth(
+		jwtService,
+	)
+
+	// ============================================
 	// Gin
 	// ============================================
 
@@ -77,6 +146,33 @@ func main() {
 			"status": "ok",
 		})
 	})
+
+	// ============================================
+	// Swagger
+	// ============================================
+
+	router.GET(
+		"/swagger/*any",
+		gin.WrapH(httpSwagger.WrapHandler),
+	)
+
+	// ============================================
+	// Routes
+	// ============================================
+
+	routes.RegisterAuthRoutes(
+		router,
+		authHdl,
+		authMiddleware,
+	)
+
+	// User routes
+	users := router.Group("/users")
+	{
+		users.POST("", userHdl.Create)
+		users.GET("/:user_id", userHdl.FindByID)
+		users.PUT("/:user_id", userHdl.Update)
+	}
 
 	// ============================================
 	// HTTP Server
