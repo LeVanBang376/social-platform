@@ -23,11 +23,15 @@ import (
 	handler "social-platform/internal/handler"
 	"social-platform/internal/middleware"
 	"social-platform/internal/repository/follow"
+	"social-platform/internal/repository/post"
+	"social-platform/internal/repository/post_like"
 	"social-platform/internal/repository/user"
 	"social-platform/internal/repository/user_session"
 	"social-platform/internal/routes"
 	authService "social-platform/internal/service/auth"
 	followService "social-platform/internal/service/follow"
+	postService "social-platform/internal/service/post"
+	postLikeService "social-platform/internal/service/post_like"
 	userService "social-platform/internal/service/user"
 
 	_ "social-platform/docs"
@@ -92,6 +96,8 @@ func main() {
 	userRepo := user.NewRepository()
 	userSessionRepo := user_session.NewRepository()
 	followRepo := follow.NewRepository()
+	postRepo := post.NewRepository()
+	postLikeRepo := post_like.NewRepository()
 
 	// ============================================
 	// Services
@@ -111,6 +117,16 @@ func main() {
 
 	followSvc := followService.NewService(database, followRepo)
 
+	postSvc := postService.NewService(
+		database,
+		postRepo,
+	)
+
+	postLikeSvc := postLikeService.NewService(
+		database,
+		postLikeRepo,
+	)
+
 	// ============================================
 	// Handlers
 	// ============================================
@@ -124,6 +140,12 @@ func main() {
 	)
 
 	followHdl := handler.NewFollowHandler(followSvc)
+
+	postHdl := handler.NewPostHandler(postSvc)
+
+	postLikeHdl := handler.NewPostLikeHandler(
+		postLikeSvc,
+	)
 
 	// ============================================
 	// Middleware
@@ -184,6 +206,20 @@ func main() {
 	routes.RegisterFollowRoutes(
 		router,
 		followHdl,
+		authMiddleware,
+	)
+
+	// Post routes
+	routes.RegisterPostRoutes(
+		router,
+		postHdl,
+		authMiddleware,
+	)
+
+	// Post like routes
+	routes.RegisterPostLikeRoutes(
+		router,
+		postLikeHdl,
 		authMiddleware,
 	)
 

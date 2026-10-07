@@ -1,5 +1,13 @@
 basePath: /
 definitions:
+  social-platform_internal_dto.CreatePostRequest:
+    properties:
+      content:
+        maxLength: 5000
+        type: string
+    required:
+    - content
+    type: object
   social-platform_internal_dto.CreateUserRequest:
     properties:
       date_of_birth:
@@ -31,6 +39,32 @@ definitions:
     required:
     - email
     - password
+    type: object
+  social-platform_internal_dto.PostLikeResponse:
+    properties:
+      created_at:
+        type: string
+      post_id:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  social-platform_internal_dto.PostResponse:
+    properties:
+      content:
+        type: string
+      created_at:
+        type: string
+      post_id:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  social-platform_internal_dto.UpdatePostRequest:
+    properties:
+      content:
+        maxLength: 5000
+        type: string
     type: object
   social-platform_internal_dto.UpdateUserRequest:
     properties:
@@ -163,6 +197,253 @@ paths:
       summary: Refresh access token
       tags:
       - Auth
+  /posts:
+    post:
+      consumes:
+      - application/json
+      description: Create a new post
+      parameters:
+      - description: Create post request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.CreatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.PostResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Create post
+      tags:
+      - Posts
+  /posts/{post_id}:
+    delete:
+      description: Delete a post. Only the post owner can delete it.
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Post not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Delete post
+      tags:
+      - Posts
+    get:
+      description: Get a post by its ID
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.PostResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Post not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get post by ID
+      tags:
+      - Posts
+    put:
+      consumes:
+      - application/json
+      description: Update a post. Only the post owner can update it.
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      - description: Update post request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.UpdatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.PostResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Post not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Update post
+      tags:
+      - Posts
+  /posts/{post_id}/like:
+    delete:
+      description: Remove user's like from a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Like not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Unlike a post
+      tags:
+      - Post Likes
+    post:
+      description: Like a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.PostLikeResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Like a post
+      tags:
+      - Post Likes
   /users:
     post:
       consumes:
@@ -350,6 +631,45 @@ paths:
       summary: Follow a user
       tags:
       - Follow
+  /users/{user_id}/posts:
+    get:
+      description: Get posts created by a specific user
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: Number of posts
+        in: query
+        name: limit
+        type: integer
+      - description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/social-platform_internal_dto.PostResponse'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get posts by user
+      tags:
+      - Posts
 securityDefinitions:
   CookieAuth:
     in: cookie
