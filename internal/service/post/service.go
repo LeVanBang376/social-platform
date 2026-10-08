@@ -2,6 +2,10 @@ package post
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"time"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
@@ -9,21 +13,25 @@ import (
 	"social-platform/internal/response"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
 type Service struct {
-	db         *gorm.DB
-	repository *postRepository.Repository
+	db          *gorm.DB
+	redisClient *redis.Client
+	repository  *postRepository.Repository
 }
 
 func NewService(
 	db *gorm.DB,
+	redisClient *redis.Client,
 	repository *postRepository.Repository,
 ) *Service {
 	return &Service{
-		db:         db,
-		repository: repository,
+		db:          db,
+		redisClient: redisClient,
+		repository:  repository,
 	}
 }
 
@@ -52,6 +60,23 @@ func (s *Service) FindByID(
 	ctx context.Context,
 	postID int64,
 ) (*dto.PostResponse, error) {
+	redisKey := fmt.Sprintf("post:%d", postID)
+	data, err := s.redisClient.Get(ctx, redisKey).Bytes()
+
+	if err == nil {
+		var res dto.PostResponse
+		if err := json.Unmarshal(data, &res); err != nil {
+			return nil, err
+		}
+
+		return &res, nil
+	}
+
+	if err != redis.Nil {
+		return nil, err
+	}
+
+	// Cache miss
 	post, err := s.repository.FindByID(
 		ctx,
 		s.db,
@@ -61,14 +86,22 @@ func (s *Service) FindByID(
 		return nil, err
 	}
 
-	return &dto.PostResponse{
+	res := dto.PostResponse{
 		PostID:       post.PostID,
 		UserID:       post.UserID,
 		Content:      post.Content,
 		CreatedAt:    post.CreatedAt,
 		LikeCount:    post.LikeCount,
 		CommentCount: post.CommentCount,
-	}, nil
+	}
+
+	redisData, err := json.Marshal(res)
+	if err != nil {
+		return nil, err
+	}
+	_ = s.redisClient.Set(ctx, redisKey, redisData, 10*time.Minute).Err()
+
+	return &res, nil
 }
 
 func (s *Service) FindByUserID(
@@ -139,6 +172,11 @@ func (s *Service) Update(
 		&post.Post,
 	); err != nil {
 		return nil, err
+	}
+
+	redisKey := fmt.Sprintf("post:%d", postID)
+	if err := s.redisClient.Del(ctx, redisKey).Err(); err != nil {
+		log.Printf("failed to delete post cache: %v", err)
 	}
 
 	return &dto.PostResponse{

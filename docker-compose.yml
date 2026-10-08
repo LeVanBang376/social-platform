@@ -13,6 +13,25 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  migrate:
+    image: migrate/migrate
+    container_name: social-platform-migrate
+    volumes:
+      - ./migrations:/migrations
+    command:
+      [
+        "-path",
+        "/migrations",
+        "-database",
+        "postgres://postgres:postgres@postgres:5432/social_platform_db?sslmode=disable",
+        "up",
+      ]
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   postgres:
     image: postgres:17-alpine
@@ -26,7 +45,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d social_platform"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d social_platform_db"]
       interval: 5s
       timeout: 5s
       retries: 5

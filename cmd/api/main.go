@@ -19,6 +19,7 @@ import (
 
 	"social-platform/infrastructure/db"
 	"social-platform/infrastructure/jwt"
+	"social-platform/infrastructure/redis"
 	"social-platform/internal/config"
 	handler "social-platform/internal/handler"
 	"social-platform/internal/middleware"
@@ -92,6 +93,7 @@ func main() {
 	// ============================================
 
 	jwtService := jwt.NewJWTService(cfg.JWTSecret)
+	redisClient := redis.NewClient(cfg.RedisAddr)
 
 	// ============================================
 	// Repositories
@@ -128,6 +130,7 @@ func main() {
 
 	postSvc := postService.NewService(
 		database,
+		redisClient,
 		postRepo,
 	)
 
