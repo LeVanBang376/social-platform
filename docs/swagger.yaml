@@ -65,6 +65,13 @@ definitions:
     - full_name
     - password
     type: object
+  social-platform_internal_dto.ForgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
   social-platform_internal_dto.LoginRequest:
     properties:
       email:
@@ -101,6 +108,20 @@ definitions:
         type: integer
       user_id:
         type: string
+    type: object
+  social-platform_internal_dto.ResetPasswordRequest:
+    properties:
+      email:
+        type: string
+      new_password:
+        minLength: 8
+        type: string
+      otp:
+        type: string
+    required:
+    - email
+    - new_password
+    - otp
     type: object
   social-platform_internal_dto.UpdateCommentRequest:
     properties:
@@ -142,6 +163,39 @@ info:
   title: Social Platform APIs
   version: "1.0"
 paths:
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Send a password reset OTP to the user's email
+      parameters:
+      - description: Forgot password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Forgot password
+      tags:
+      - Auth
   /auth/login:
     post:
       consumes:
@@ -243,6 +297,44 @@ paths:
             additionalProperties: true
             type: object
       summary: Refresh access token
+      tags:
+      - Auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset user password using a 6-digit OTP
+      parameters:
+      - description: Reset password request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Invalid or expired OTP
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Reset password
       tags:
       - Auth
   /comments/{comment_id}:

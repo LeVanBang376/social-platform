@@ -243,3 +243,88 @@ func (h *AuthHandler) clearAuthCookies(c *gin.Context) {
 		true,
 	)
 }
+
+// ForgotPassword godoc
+// @Summary      Forgot password
+// @Description  Send a password reset OTP to the user's email
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      dto.ForgotPasswordRequest  true  "Forgot password request"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      400      {object}  map[string]interface{}  "Invalid request"
+// @Failure      500      {object}  map[string]interface{}  "Internal server error"
+// @Router       /auth/forgot-password [post]
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req dto.ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusBadRequest,
+			"Invalid request",
+		)
+		return
+	}
+
+	if err := h.service.ForgotPassword(
+		c.Request.Context(),
+		&req,
+	); err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusInternalServerError,
+			"Failed to process forgot password request",
+		)
+		return
+	}
+
+	response.NonDataJSON(
+		c.Writer,
+		http.StatusOK,
+		"If the email exists, a password reset OTP has been sent",
+	)
+}
+
+// ResetPassword godoc
+// @Summary      Reset password
+// @Description  Reset user password using a 6-digit OTP
+// @Tags         Auth
+// @Accept       json
+// @Produce      json
+// @Param        request  body      dto.ResetPasswordRequest  true  "Reset password request"
+// @Success      200      {object}  map[string]interface{}
+// @Failure      400      {object}  map[string]interface{}  "Invalid request"
+// @Failure      401      {object}  map[string]interface{}  "Invalid or expired OTP"
+// @Failure      500      {object}  map[string]interface{}  "Internal server error"
+// @Router       /auth/reset-password [post]
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req dto.ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusBadRequest,
+			"Invalid request",
+		)
+		return
+	}
+
+	if err := h.service.ResetPassword(
+		c.Request.Context(),
+		&req,
+	); err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusUnauthorized,
+			err.Error(),
+		)
+		return
+	}
+
+	response.NonDataJSON(
+		c.Writer,
+		http.StatusOK,
+		"Password reset successful",
+	)
+}

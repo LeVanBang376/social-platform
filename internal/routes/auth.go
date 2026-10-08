@@ -16,6 +16,11 @@ func RegisterAuthRoutes(
 		auth.POST("/login", handler.Login)
 		auth.POST("/refresh", handler.Refresh)
 		auth.POST("/logout", handler.Logout)
+		auth.POST("/forgot-password", handler.ForgotPassword)
+		auth.POST(
+			"/reset-password",
+			handler.ResetPassword,
+		)
 
 		protected := auth.Group("")
 		protected.Use(authMiddleware)

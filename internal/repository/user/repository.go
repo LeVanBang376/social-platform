@@ -74,3 +74,17 @@ func (r *Repository) Update(
 		Save(user).
 		Error
 }
+
+func (r *Repository) UpdatePasswordHash(
+	ctx context.Context,
+	db *gorm.DB,
+	userID uuid.UUID,
+	passwordHash string,
+) error {
+	return db.
+		WithContext(ctx).
+		Model(&model.User{}).
+		Where("user_id = ?", userID).
+		Update("password_hash", passwordHash).
+		Error
+}

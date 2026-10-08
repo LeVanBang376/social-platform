@@ -26,6 +26,7 @@ import (
 	"social-platform/internal/repository/comment"
 	commentLikeRepository "social-platform/internal/repository/comment_like"
 	"social-platform/internal/repository/follow"
+	passwordResetOTPRepository "social-platform/internal/repository/password_reset_otp"
 	"social-platform/internal/repository/post"
 	"social-platform/internal/repository/post_like"
 	"social-platform/internal/repository/user"
@@ -103,9 +104,13 @@ func main() {
 
 	userRepo := user.NewRepository()
 	userSessionRepo := user_session.NewRepository()
+	passwordResetOTPRepo := passwordResetOTPRepository.NewRepository()
+
 	followRepo := follow.NewRepository()
+
 	postRepo := post.NewRepository()
 	postLikeRepo := post_like.NewRepository()
+
 	commentRepo := comment.NewRepository()
 	commentLikeRepo := commentLikeRepository.NewRepository()
 
@@ -122,6 +127,8 @@ func main() {
 		database,
 		userRepo,
 		userSessionRepo,
+		passwordResetOTPRepo,
+		redisClient,
 		jwtService,
 	)
 
