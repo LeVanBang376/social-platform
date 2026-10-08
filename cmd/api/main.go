@@ -93,7 +93,9 @@ func main() {
 	// ============================================
 
 	jwtService := jwt.NewJWTService(cfg.JWTSecret)
+
 	redisClient := redis.NewClient(cfg.RedisAddr)
+	defer redisClient.Close()
 
 	// ============================================
 	// Repositories

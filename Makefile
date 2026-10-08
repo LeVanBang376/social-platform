@@ -15,6 +15,9 @@ endif
 run:
 	go run cmd/api/main.go
 
+worker:
+	go run cmd/worker/main.go
+
 build:
 	go build -o $(APP_NAME) .
 
