@@ -6,6 +6,7 @@ import (
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
 	postRepository "social-platform/internal/repository/post"
+	"social-platform/internal/response"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -60,20 +61,26 @@ func (s *Service) FindByID(
 		return nil, err
 	}
 
-	return dto.FromPostModelToResponse(post), nil
+	return &dto.PostResponse{
+		PostID:       post.PostID,
+		UserID:       post.UserID,
+		Content:      post.Content,
+		CreatedAt:    post.CreatedAt,
+		LikeCount:    post.LikeCount,
+		CommentCount: post.CommentCount,
+	}, nil
 }
 
 func (s *Service) FindByUserID(
 	ctx context.Context,
 	userID uuid.UUID,
-	query *dto.FindPostsQuery,
+	pagination *response.Pagination,
 ) ([]*dto.PostResponse, error) {
 	posts, err := s.repository.FindByUserID(
 		ctx,
 		s.db,
 		userID,
-		query.Limit,
-		query.Offset,
+		pagination,
 	)
 	if err != nil {
 		return nil, err
@@ -88,7 +95,14 @@ func (s *Service) FindByUserID(
 	for _, post := range posts {
 		responses = append(
 			responses,
-			dto.FromPostModelToResponse(post),
+			&dto.PostResponse{
+				PostID:       post.PostID,
+				UserID:       post.UserID,
+				Content:      post.Content,
+				CreatedAt:    post.CreatedAt,
+				LikeCount:    post.LikeCount,
+				CommentCount: post.CommentCount,
+			},
 		)
 	}
 
@@ -122,12 +136,19 @@ func (s *Service) Update(
 	if err := s.repository.Update(
 		ctx,
 		s.db,
-		post,
+		&post.Post,
 	); err != nil {
 		return nil, err
 	}
 
-	return dto.FromPostModelToResponse(post), nil
+	return &dto.PostResponse{
+		PostID:       post.PostID,
+		UserID:       post.UserID,
+		Content:      post.Content,
+		CreatedAt:    post.CreatedAt,
+		LikeCount:    post.LikeCount,
+		CommentCount: post.CommentCount,
+	}, nil
 }
 
 func (s *Service) Delete(

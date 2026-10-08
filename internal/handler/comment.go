@@ -9,39 +9,41 @@ import (
 	"social-platform/internal/dto"
 	"social-platform/internal/middleware"
 	"social-platform/internal/response"
-	postService "social-platform/internal/service/post"
+	commentService "social-platform/internal/service/comment"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-type PostHandler struct {
-	service *postService.Service
+type CommentHandler struct {
+	service *commentService.Service
 }
 
-func NewPostHandler(
-	service *postService.Service,
-) *PostHandler {
-	return &PostHandler{
+func NewCommentHandler(
+	service *commentService.Service,
+) *CommentHandler {
+	return &CommentHandler{
 		service: service,
 	}
 }
 
 // Create godoc
-// @Summary      Create post
-// @Description  Create a new post
-// @Tags         Posts
+// @Summary      Create comment
+// @Description  Create a new comment on a post
+// @Tags         Comments
 // @Accept       json
 // @Produce      json
 // @Security     CookieAuth
-// @Param        request body dto.CreatePostRequest true "Create post request"
-// @Success      201 {object} dto.PostResponse
+// @Param        post_id path int true "Post ID"
+// @Param        request body dto.CreateCommentRequest true "Create comment request"
+// @Success      201 {object} dto.CommentResponse
 // @Failure      400 {object} map[string]interface{} "Bad request"
 // @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      404 {object} map[string]interface{} "Post or parent comment not found"
 // @Failure      500 {object} map[string]interface{} "Internal server error"
-// @Router       /posts [post]
-func (h *PostHandler) Create(c *gin.Context) {
+// @Router       /posts/{post_id}/comments [post]
+func (h *CommentHandler) Create(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
 	if userID == uuid.Nil {
@@ -53,7 +55,21 @@ func (h *PostHandler) Create(c *gin.Context) {
 		return
 	}
 
-	var req dto.CreatePostRequest
+	postID, err := strconv.ParseInt(
+		c.Param("post_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusBadRequest,
+			"Invalid post ID",
+		)
+		return
+	}
+
+	var req dto.CreateCommentRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.NonDataJSON(
@@ -64,12 +80,31 @@ func (h *PostHandler) Create(c *gin.Context) {
 		return
 	}
 
-	post, err := h.service.Create(
+	comment, err := h.service.Create(
 		c.Request.Context(),
-		&req,
+		postID,
 		userID,
+		&req,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusNotFound,
+				"Post or parent comment not found",
+			)
+			return
+		}
+
+		if errors.Is(err, gorm.ErrInvalidData) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusBadRequest,
+				"Invalid parent comment",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
@@ -81,23 +116,25 @@ func (h *PostHandler) Create(c *gin.Context) {
 	response.JSON(
 		c.Writer,
 		http.StatusCreated,
-		"Create post successful",
-		post,
+		"Create comment successful",
+		comment,
 	)
 }
 
-// FindByID godoc
-// @Summary      Get post by ID
-// @Description  Get a post by its ID
-// @Tags         Posts
+// FindByPostID godoc
+// @Summary      Get comments by post
+// @Description  Get paginated comments belonging to a specific post
+// @Tags         Comments
 // @Produce      json
 // @Param        post_id path int true "Post ID"
-// @Success      200 {object} dto.PostResponse
+// @Param        page query int false "Page number" default(1)
+// @Param        per_page query int false "Number of comments per page" default(10) maximum(200)
+// @Success      200 {array} dto.CommentResponse
 // @Failure      400 {object} map[string]interface{} "Bad request"
 // @Failure      404 {object} map[string]interface{} "Post not found"
 // @Failure      500 {object} map[string]interface{} "Internal server error"
-// @Router       /posts/{post_id} [get]
-func (h *PostHandler) FindByID(c *gin.Context) {
+// @Router       /posts/{post_id}/comments [get]
+func (h *CommentHandler) FindByPostID(c *gin.Context) {
 	postID, err := strconv.ParseInt(
 		c.Param("post_id"),
 		10,
@@ -112,9 +149,12 @@ func (h *PostHandler) FindByID(c *gin.Context) {
 		return
 	}
 
-	post, err := h.service.FindByID(
+	pagination := response.NewPagination(c.Request)
+
+	comments, err := h.service.FindByPostID(
 		c.Request.Context(),
 		postID,
+		pagination,
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -129,56 +169,10 @@ func (h *PostHandler) FindByID(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
-		)
-		return
-	}
-
-	response.JSON(
-		c.Writer,
-		http.StatusOK,
-		"Get post successful",
-		post,
-	)
-}
-
-// FindByUserID godoc
-// @Summary      Get posts by user
-// @Description  Get posts created by a specific user
-// @Tags         Posts
-// @Produce      json
-// @Param        user_id path string true "User ID"
-// @Param        page query int false "Page number"
-// @Param        per_page query int false "Number of posts per page"
-// @Success      200 {array} dto.PostResponse
-// @Failure      400 {object} map[string]interface{} "Bad request"
-// @Failure      500 {object} map[string]interface{} "Internal server error"
-// @Router       /users/{user_id}/posts [get]
-func (h *PostHandler) FindByUserID(c *gin.Context) {
-	userID, err := uuid.Parse(
-		c.Param("user_id"),
-	)
-	if err != nil {
-		response.NonDataJSON(
-			c.Writer,
-			http.StatusBadRequest,
-			"Invalid user ID",
-		)
-		return
-	}
-
-	pagination := response.NewPagination(c.Request)
-
-	posts, err := h.service.FindByUserID(
-		c.Request.Context(),
-		userID,
-		pagination,
-	)
-	if err != nil {
-		response.NonDataJSON(
-			c.Writer,
-			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			fmt.Sprintf(
+				"Internal server error: %s",
+				err.Error(),
+			),
 		)
 		return
 	}
@@ -186,40 +180,27 @@ func (h *PostHandler) FindByUserID(c *gin.Context) {
 	response.PaginatedJSON(
 		c.Writer,
 		http.StatusOK,
-		"Get user posts successful",
-		posts,
+		"Get post comments successful",
+		comments,
 		pagination,
 	)
 }
 
-// Update godoc
-// @Summary      Update post
-// @Description  Update a post. Only the post owner can update it.
-// @Tags         Posts
-// @Accept       json
+// FindReplies godoc
+// @Summary      Get comment replies
+// @Description  Get paginated replies of a comment
+// @Tags         Comments
 // @Produce      json
-// @Security     CookieAuth
 // @Param        post_id path int true "Post ID"
-// @Param        request body dto.UpdatePostRequest true "Update post request"
-// @Success      200 {object} dto.PostResponse
+// @Param        comment_id path int true "Comment ID"
+// @Param        page query int false "Page number" default(1)
+// @Param        per_page query int false "Number of replies per page" default(10) maximum(200)
+// @Success      200 {array} dto.CommentResponse
 // @Failure      400 {object} map[string]interface{} "Bad request"
-// @Failure      401 {object} map[string]interface{} "Unauthorized"
-// @Failure      403 {object} map[string]interface{} "Forbidden"
-// @Failure      404 {object} map[string]interface{} "Post not found"
+// @Failure      404 {object} map[string]interface{} "Comment not found"
 // @Failure      500 {object} map[string]interface{} "Internal server error"
-// @Router       /posts/{post_id} [put]
-func (h *PostHandler) Update(c *gin.Context) {
-	userID := middleware.GetUserID(c)
-
-	if userID == uuid.Nil {
-		response.NonDataJSON(
-			c.Writer,
-			http.StatusUnauthorized,
-			"Unauthorized",
-		)
-		return
-	}
-
+// @Router       /posts/{post_id}/comments/{comment_id}/replies [get]
+func (h *CommentHandler) FindReplies(c *gin.Context) {
 	postID, err := strconv.ParseInt(
 		c.Param("post_id"),
 		10,
@@ -234,7 +215,101 @@ func (h *PostHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req dto.UpdatePostRequest
+	commentID, err := strconv.ParseInt(
+		c.Param("comment_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusBadRequest,
+			"Invalid comment ID",
+		)
+		return
+	}
+
+	pagination := response.NewPagination(c.Request)
+
+	comments, err := h.service.FindReplies(
+		c.Request.Context(),
+		postID,
+		commentID,
+		pagination,
+	)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusNotFound,
+				"Comment not found",
+			)
+			return
+		}
+
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusInternalServerError,
+			fmt.Sprintf(
+				"Internal server error: %s",
+				err.Error(),
+			),
+		)
+		return
+	}
+
+	response.PaginatedJSON(
+		c.Writer,
+		http.StatusOK,
+		"Get comment replies successful",
+		comments,
+		pagination,
+	)
+}
+
+// Update godoc
+// @Summary      Update comment
+// @Description  Update a comment. Only the comment owner can update it.
+// @Tags         Comments
+// @Accept       json
+// @Produce      json
+// @Security     CookieAuth
+// @Param        comment_id path int true "Comment ID"
+// @Param        request body dto.UpdateCommentRequest true "Update comment request"
+// @Success      200 {object} dto.CommentResponse
+// @Failure      400 {object} map[string]interface{} "Bad request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      403 {object} map[string]interface{} "Forbidden"
+// @Failure      404 {object} map[string]interface{} "Comment not found"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /comments/{comment_id} [put]
+func (h *CommentHandler) Update(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	if userID == uuid.Nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusUnauthorized,
+			"Unauthorized",
+		)
+		return
+	}
+
+	commentID, err := strconv.ParseInt(
+		c.Param("comment_id"),
+		10,
+		64,
+	)
+	if err != nil {
+		response.NonDataJSON(
+			c.Writer,
+			http.StatusBadRequest,
+			"Invalid comment ID",
+		)
+		return
+	}
+
+	var req dto.UpdateCommentRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.NonDataJSON(
@@ -245,9 +320,9 @@ func (h *PostHandler) Update(c *gin.Context) {
 		return
 	}
 
-	post, err := h.service.Update(
+	comment, err := h.service.Update(
 		c.Request.Context(),
-		postID,
+		commentID,
 		userID,
 		&req,
 	)
@@ -256,7 +331,7 @@ func (h *PostHandler) Update(c *gin.Context) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
-				"Post not found",
+				"Comment not found",
 			)
 			return
 		}
@@ -265,7 +340,7 @@ func (h *PostHandler) Update(c *gin.Context) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
-				"You are not the owner of this post",
+				"You are not the owner of this comment",
 			)
 			return
 		}
@@ -281,25 +356,25 @@ func (h *PostHandler) Update(c *gin.Context) {
 	response.JSON(
 		c.Writer,
 		http.StatusOK,
-		"Update post successful",
-		post,
+		"Update comment successful",
+		comment,
 	)
 }
 
 // Delete godoc
-// @Summary      Delete post
-// @Description  Delete a post. Only the post owner can delete it.
-// @Tags         Posts
+// @Summary      Delete comment
+// @Description  Delete a comment. Only the comment owner can delete it.
+// @Tags         Comments
 // @Security     CookieAuth
-// @Param        post_id path int true "Post ID"
+// @Param        comment_id path int true "Comment ID"
 // @Success      200 {object} map[string]interface{}
 // @Failure      400 {object} map[string]interface{} "Bad request"
 // @Failure      401 {object} map[string]interface{} "Unauthorized"
 // @Failure      403 {object} map[string]interface{} "Forbidden"
-// @Failure      404 {object} map[string]interface{} "Post not found"
+// @Failure      404 {object} map[string]interface{} "Comment not found"
 // @Failure      500 {object} map[string]interface{} "Internal server error"
-// @Router       /posts/{post_id} [delete]
-func (h *PostHandler) Delete(c *gin.Context) {
+// @Router       /comments/{comment_id} [delete]
+func (h *CommentHandler) Delete(c *gin.Context) {
 	userID := middleware.GetUserID(c)
 
 	if userID == uuid.Nil {
@@ -311,8 +386,8 @@ func (h *PostHandler) Delete(c *gin.Context) {
 		return
 	}
 
-	postID, err := strconv.ParseInt(
-		c.Param("post_id"),
+	commentID, err := strconv.ParseInt(
+		c.Param("comment_id"),
 		10,
 		64,
 	)
@@ -320,21 +395,21 @@ func (h *PostHandler) Delete(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusBadRequest,
-			"Invalid post ID",
+			"Invalid comment ID",
 		)
 		return
 	}
 
 	if err := h.service.Delete(
 		c.Request.Context(),
-		postID,
+		commentID,
 		userID,
 	); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
-				"Post not found",
+				"Comment not found",
 			)
 			return
 		}
@@ -343,7 +418,7 @@ func (h *PostHandler) Delete(c *gin.Context) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
-				"You are not the owner of this post",
+				"You are not the owner of this comment",
 			)
 			return
 		}
@@ -359,6 +434,6 @@ func (h *PostHandler) Delete(c *gin.Context) {
 	response.NonDataJSON(
 		c.Writer,
 		http.StatusOK,
-		"Delete post successful",
+		"Delete comment successful",
 	)
 }

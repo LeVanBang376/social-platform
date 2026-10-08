@@ -1,18 +1,11 @@
 package dto
 
 import (
+	"social-platform/internal/model"
 	"time"
 
 	"github.com/google/uuid"
-
-	"social-platform/internal/model"
 )
-
-type FindCommentsQuery struct {
-	ParentCommentID *int64 `form:"parent_comment_id"`
-	Limit           int    `form:"limit,default=20" binding:"omitempty,min=1,max=100"`
-	Offset          int    `form:"offset,default=0" binding:"omitempty,min=0"`
-}
 
 type CreateCommentRequest struct {
 	Content         string `json:"content" binding:"required,max=5000"`
@@ -30,24 +23,13 @@ type CommentResponse struct {
 	ParentCommentID *int64    `json:"parent_comment_id"`
 	Content         string    `json:"content"`
 	CreatedAt       time.Time `json:"created_at"`
-
-	Replies []*CommentResponse `json:"replies,omitempty"`
+	ReplyCount      int64     `json:"reply_count"`
+	LikeCount       int64     `json:"like_count"`
 }
 
-func FromCommentModelToResponse(comment *model.Comment) *CommentResponse {
-	replies := make(
-		[]*CommentResponse,
-		0,
-		len(comment.Replies),
-	)
-
-	for _, reply := range comment.Replies {
-		replies = append(
-			replies,
-			FromCommentModelToResponse(&reply),
-		)
-	}
-
+func FromCommentModelToResponse(
+	comment *model.Comment,
+) *CommentResponse {
 	return &CommentResponse{
 		CommentID:       comment.CommentID,
 		PostID:          comment.PostID,
@@ -55,6 +37,5 @@ func FromCommentModelToResponse(comment *model.Comment) *CommentResponse {
 		ParentCommentID: comment.ParentCommentID,
 		Content:         comment.Content,
 		CreatedAt:       comment.CreatedAt,
-		Replies:         replies,
 	}
 }

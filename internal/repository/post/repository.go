@@ -7,9 +7,16 @@ import (
 	"gorm.io/gorm"
 
 	"social-platform/internal/model"
+	"social-platform/internal/response"
 )
 
 type Repository struct{}
+
+type PostWithCounts struct {
+	model.Post
+	LikeCount    int64 `gorm:"column:like_count"`
+	CommentCount int64 `gorm:"column:comment_count"`
+}
 
 func NewRepository() *Repository {
 	return &Repository{}
@@ -30,12 +37,27 @@ func (r *Repository) FindByID(
 	ctx context.Context,
 	db *gorm.DB,
 	postID int64,
-) (*model.Post, error) {
-	var post model.Post
+) (*PostWithCounts, error) {
+	var post PostWithCounts
 
 	err := db.
 		WithContext(ctx).
-		First(&post, "post_id = ?", postID).
+		Table("posts AS p").
+		Select(`
+			p.*,
+			(
+				SELECT COUNT(*)
+				FROM post_likes AS pl
+				WHERE pl.post_id = p.post_id
+			) AS like_count,
+			(
+				SELECT COUNT(*)
+				FROM comments AS c
+				WHERE c.post_id = p.post_id
+			) AS comment_count
+		`).
+		Where("p.post_id = ?", postID).
+		Scan(&post).
 		Error
 
 	if err != nil {
@@ -49,21 +71,45 @@ func (r *Repository) FindByUserID(
 	ctx context.Context,
 	db *gorm.DB,
 	userID uuid.UUID,
-	limit int,
-	offset int,
-) ([]*model.Post, error) {
-	var posts []*model.Post
+	pagination *response.Pagination,
+) ([]*PostWithCounts, error) {
+	var posts []*PostWithCounts
 
-	err := db.
+	var total int64
+
+	if err := db.
 		WithContext(ctx).
+		Model(&model.Post{}).
 		Where("user_id = ?", userID).
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&posts).
-		Error
+		Count(&total).
+		Error; err != nil {
+		return nil, err
+	}
 
-	if err != nil {
+	pagination.SetTotal(total)
+
+	if err := db.
+		WithContext(ctx).
+		Table("posts AS p").
+		Select(`
+			p.*,
+			(
+				SELECT COUNT(*)
+				FROM post_likes AS pl
+				WHERE pl.post_id = p.post_id
+			) AS like_count,
+			(
+				SELECT COUNT(*)
+				FROM comments AS c
+				WHERE c.post_id = p.post_id
+			) AS comment_count
+		`).
+		Where("p.user_id = ?", userID).
+		Order("p.created_at DESC").
+		Limit(pagination.PerPage).
+		Offset(pagination.Offset()).
+		Scan(&posts).
+		Error; err != nil {
 		return nil, err
 	}
 

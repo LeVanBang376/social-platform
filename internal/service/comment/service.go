@@ -7,6 +7,7 @@ import (
 	"social-platform/internal/model"
 	commentRepository "social-platform/internal/repository/comment"
 	postRepository "social-platform/internal/repository/post"
+	"social-platform/internal/response"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -85,33 +86,16 @@ func (s *Service) Create(
 	return dto.FromCommentModelToResponse(comment), nil
 }
 
-func (s *Service) FindByID(
-	ctx context.Context,
-	commentID int64,
-) (*dto.CommentResponse, error) {
-	comment, err := s.repository.FindByID(
-		ctx,
-		s.db,
-		commentID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return dto.FromCommentModelToResponse(comment), nil
-}
-
 func (s *Service) FindByPostID(
 	ctx context.Context,
 	postID int64,
-	query *dto.FindCommentsQuery,
+	pagination *response.Pagination,
 ) ([]*dto.CommentResponse, error) {
 	comments, err := s.repository.FindByPostID(
 		ctx,
 		s.db,
 		postID,
-		query.Limit,
-		query.Offset,
+		pagination,
 	)
 	if err != nil {
 		return nil, err
@@ -126,7 +110,16 @@ func (s *Service) FindByPostID(
 	for _, comment := range comments {
 		responses = append(
 			responses,
-			dto.FromCommentModelToResponse(comment),
+			&dto.CommentResponse{
+				CommentID:       comment.CommentID,
+				PostID:          comment.PostID,
+				UserID:          comment.UserID,
+				ParentCommentID: comment.ParentCommentID,
+				Content:         comment.Content,
+				CreatedAt:       comment.CreatedAt,
+				ReplyCount:      comment.ReplyCount,
+				LikeCount:       comment.LikeCount,
+			},
 		)
 	}
 
@@ -135,12 +128,16 @@ func (s *Service) FindByPostID(
 
 func (s *Service) FindReplies(
 	ctx context.Context,
+	postID int64,
 	commentID int64,
+	pagination *response.Pagination,
 ) ([]*dto.CommentResponse, error) {
 	comments, err := s.repository.FindReplies(
 		ctx,
 		s.db,
+		postID,
 		commentID,
+		pagination,
 	)
 	if err != nil {
 		return nil, err
@@ -155,7 +152,15 @@ func (s *Service) FindReplies(
 	for _, comment := range comments {
 		responses = append(
 			responses,
-			dto.FromCommentModelToResponse(comment),
+			&dto.CommentResponse{
+				CommentID:       comment.CommentID,
+				PostID:          comment.PostID,
+				UserID:          comment.UserID,
+				ParentCommentID: comment.ParentCommentID,
+				Content:         comment.Content,
+				CreatedAt:       comment.CreatedAt,
+				LikeCount:       comment.LikeCount,
+			},
 		)
 	}
 

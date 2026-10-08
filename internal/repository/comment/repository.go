@@ -6,9 +6,16 @@ import (
 	"gorm.io/gorm"
 
 	"social-platform/internal/model"
+	"social-platform/internal/response"
 )
 
 type Repository struct{}
+
+type CommentWithCounts struct {
+	model.Comment
+	LikeCount  int64 `gorm:"column:like_count"`
+	ReplyCount int64 `gorm:"column:reply_count"`
+}
 
 func NewRepository() *Repository {
 	return &Repository{}
@@ -48,24 +55,51 @@ func (r *Repository) FindByPostID(
 	ctx context.Context,
 	db *gorm.DB,
 	postID int64,
-	limit int,
-	offset int,
-) ([]*model.Comment, error) {
-	var comments []*model.Comment
+	pagination *response.Pagination,
+) ([]*CommentWithCounts, error) {
+	var comments []*CommentWithCounts
 
-	err := db.
+	var total int64
+
+	if err := db.
 		WithContext(ctx).
+		Model(&model.Comment{}).
 		Where(
 			"post_id = ? AND parent_comment_id IS NULL",
 			postID,
 		).
-		Order("created_at DESC").
-		Limit(limit).
-		Offset(offset).
-		Find(&comments).
-		Error
+		Count(&total).
+		Error; err != nil {
+		return nil, err
+	}
 
-	if err != nil {
+	pagination.SetTotal(total)
+
+	if err := db.
+		WithContext(ctx).
+		Table("comments AS c").
+		Select(`
+			c.*,
+			(
+				SELECT COUNT(*)
+				FROM comment_likes AS cl
+				WHERE cl.comment_id = c.comment_id
+			) AS like_count,
+			(
+				SELECT COUNT(*)
+				FROM comments AS r
+				WHERE r.parent_comment_id = c.comment_id
+			) AS reply_count
+		`).
+		Where(
+			"c.post_id = ? AND c.parent_comment_id IS NULL",
+			postID,
+		).
+		Order("c.created_at DESC").
+		Limit(pagination.PerPage).
+		Offset(pagination.Offset()).
+		Scan(&comments).
+		Error; err != nil {
 		return nil, err
 	}
 
@@ -75,18 +109,50 @@ func (r *Repository) FindByPostID(
 func (r *Repository) FindReplies(
 	ctx context.Context,
 	db *gorm.DB,
+	postID int64,
 	parentCommentID int64,
-) ([]*model.Comment, error) {
-	var comments []*model.Comment
+	pagination *response.Pagination,
+) ([]*CommentWithCounts, error) {
+	var comments []*CommentWithCounts
 
-	err := db.
+	var total int64
+
+	if err := db.
 		WithContext(ctx).
-		Where("parent_comment_id = ?", parentCommentID).
-		Order("created_at ASC").
-		Find(&comments).
-		Error
+		Model(&model.Comment{}).
+		Where(
+			"post_id = ? AND parent_comment_id = ?",
+			postID,
+			parentCommentID,
+		).
+		Count(&total).
+		Error; err != nil {
+		return nil, err
+	}
 
-	if err != nil {
+	pagination.SetTotal(total)
+
+	if err := db.
+		WithContext(ctx).
+		Table("comments AS c").
+		Select(`
+			c.*,
+			(
+				SELECT COUNT(*)
+				FROM comment_likes AS cl
+				WHERE cl.comment_id = c.comment_id
+			) AS like_count
+		`).
+		Where(
+			"c.post_id = ? AND c.parent_comment_id = ?",
+			postID,
+			parentCommentID,
+		).
+		Order("c.created_at ASC").
+		Limit(pagination.PerPage).
+		Offset(pagination.Offset()).
+		Scan(&comments).
+		Error; err != nil {
 		return nil, err
 	}
 

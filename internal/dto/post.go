@@ -23,10 +23,12 @@ type UpdatePostRequest struct {
 }
 
 type PostResponse struct {
-	PostID    int64     `json:"post_id"`
-	UserID    uuid.UUID `json:"user_id"`
-	Content   string    `json:"content"`
-	CreatedAt time.Time `json:"created_at"`
+	PostID       int64     `json:"post_id"`
+	UserID       uuid.UUID `json:"user_id"`
+	Content      string    `json:"content"`
+	CreatedAt    time.Time `json:"created_at"`
+	LikeCount    int64     `json:"like_count"`
+	CommentCount int64     `json:"comment_count"`
 }
 
 func FromPostModelToResponse(post *model.Post) *PostResponse {

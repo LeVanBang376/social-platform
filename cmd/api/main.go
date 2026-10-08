@@ -22,6 +22,8 @@ import (
 	"social-platform/internal/config"
 	handler "social-platform/internal/handler"
 	"social-platform/internal/middleware"
+	"social-platform/internal/repository/comment"
+	commentLikeRepository "social-platform/internal/repository/comment_like"
 	"social-platform/internal/repository/follow"
 	"social-platform/internal/repository/post"
 	"social-platform/internal/repository/post_like"
@@ -29,6 +31,8 @@ import (
 	"social-platform/internal/repository/user_session"
 	"social-platform/internal/routes"
 	authService "social-platform/internal/service/auth"
+	commentService "social-platform/internal/service/comment"
+	commentLikeService "social-platform/internal/service/comment_like"
 	followService "social-platform/internal/service/follow"
 	postService "social-platform/internal/service/post"
 	postLikeService "social-platform/internal/service/post_like"
@@ -98,6 +102,8 @@ func main() {
 	followRepo := follow.NewRepository()
 	postRepo := post.NewRepository()
 	postLikeRepo := post_like.NewRepository()
+	commentRepo := comment.NewRepository()
+	commentLikeRepo := commentLikeRepository.NewRepository()
 
 	// ============================================
 	// Services
@@ -115,7 +121,10 @@ func main() {
 		jwtService,
 	)
 
-	followSvc := followService.NewService(database, followRepo)
+	followSvc := followService.NewService(
+		database,
+		followRepo,
+	)
 
 	postSvc := postService.NewService(
 		database,
@@ -125,6 +134,17 @@ func main() {
 	postLikeSvc := postLikeService.NewService(
 		database,
 		postLikeRepo,
+	)
+
+	commentSvc := commentService.NewService(
+		database,
+		commentRepo,
+		postRepo,
+	)
+
+	commentLikeSvc := commentLikeService.NewService(
+		database,
+		commentLikeRepo,
 	)
 
 	// ============================================
@@ -139,12 +159,24 @@ func main() {
 		authSvc,
 	)
 
-	followHdl := handler.NewFollowHandler(followSvc)
+	followHdl := handler.NewFollowHandler(
+		followSvc,
+	)
 
-	postHdl := handler.NewPostHandler(postSvc)
+	postHdl := handler.NewPostHandler(
+		postSvc,
+	)
 
 	postLikeHdl := handler.NewPostLikeHandler(
 		postLikeSvc,
+	)
+
+	commentHdl := handler.NewCommentHandler(
+		commentSvc,
+	)
+
+	commentLikeHdl := handler.NewCommentLikeHandler(
+		commentLikeSvc,
 	)
 
 	// ============================================
@@ -189,6 +221,7 @@ func main() {
 	// Routes
 	// ============================================
 
+	// Auth routes
 	routes.RegisterAuthRoutes(
 		router,
 		authHdl,
@@ -220,6 +253,20 @@ func main() {
 	routes.RegisterPostLikeRoutes(
 		router,
 		postLikeHdl,
+		authMiddleware,
+	)
+
+	// Comment routes
+	routes.RegisterCommentRoutes(
+		router,
+		commentHdl,
+		authMiddleware,
+	)
+
+	// Comment like routes
+	routes.RegisterCommentLikeRoutes(
+		router,
+		commentLikeHdl,
 		authMiddleware,
 	)
 

@@ -1,5 +1,43 @@
 basePath: /
 definitions:
+  social-platform_internal_dto.CommentLikeResponse:
+    properties:
+      comment_id:
+        type: integer
+      created_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  social-platform_internal_dto.CommentResponse:
+    properties:
+      comment_id:
+        type: integer
+      content:
+        type: string
+      created_at:
+        type: string
+      like_count:
+        type: integer
+      parent_comment_id:
+        type: integer
+      post_id:
+        type: integer
+      reply_count:
+        type: integer
+      user_id:
+        type: string
+    type: object
+  social-platform_internal_dto.CreateCommentRequest:
+    properties:
+      content:
+        maxLength: 5000
+        type: string
+      parent_comment_id:
+        type: integer
+    required:
+    - content
+    type: object
   social-platform_internal_dto.CreatePostRequest:
     properties:
       content:
@@ -51,13 +89,23 @@ definitions:
     type: object
   social-platform_internal_dto.PostResponse:
     properties:
+      comment_count:
+        type: integer
       content:
         type: string
       created_at:
         type: string
+      like_count:
+        type: integer
       post_id:
         type: integer
       user_id:
+        type: string
+    type: object
+  social-platform_internal_dto.UpdateCommentRequest:
+    properties:
+      content:
+        maxLength: 5000
         type: string
     type: object
   social-platform_internal_dto.UpdatePostRequest:
@@ -197,6 +245,179 @@ paths:
       summary: Refresh access token
       tags:
       - Auth
+  /comments/{comment_id}:
+    delete:
+      description: Delete a comment. Only the comment owner can delete it.
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Comment not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Delete comment
+      tags:
+      - Comments
+    put:
+      consumes:
+      - application/json
+      description: Update a comment. Only the comment owner can update it.
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      - description: Update comment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.UpdateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.CommentResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Comment not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Update comment
+      tags:
+      - Comments
+  /comments/{comment_id}/likes:
+    delete:
+      description: Remove the current user's like from a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Like not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Unlike comment
+      tags:
+      - Comment Likes
+    post:
+      description: Like a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.CommentLikeResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Like comment
+      tags:
+      - Comment Likes
   /posts:
     post:
       consumes:
@@ -367,6 +588,153 @@ paths:
       summary: Update post
       tags:
       - Posts
+  /posts/{post_id}/comments:
+    get:
+      description: Get paginated comments belonging to a specific post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Number of comments per page
+        in: query
+        maximum: 200
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/social-platform_internal_dto.CommentResponse'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Post not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get comments by post
+      tags:
+      - Comments
+    post:
+      consumes:
+      - application/json
+      description: Create a new comment on a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      - description: Create comment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.CommentResponse'
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Post or parent comment not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Create comment
+      tags:
+      - Comments
+  /posts/{post_id}/comments/{comment_id}/replies:
+    get:
+      description: Get paginated replies of a comment
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: integer
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: integer
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Number of replies per page
+        in: query
+        maximum: 200
+        name: per_page
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/social-platform_internal_dto.CommentResponse'
+            type: array
+        "400":
+          description: Bad request
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Comment not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get comment replies
+      tags:
+      - Comments
   /posts/{post_id}/like:
     delete:
       description: Remove user's like from a post
@@ -640,13 +1008,13 @@ paths:
         name: user_id
         required: true
         type: string
-      - description: Number of posts
+      - description: Page number
         in: query
-        name: limit
+        name: page
         type: integer
-      - description: Offset
+      - description: Number of posts per page
         in: query
-        name: offset
+        name: per_page
         type: integer
       produces:
       - application/json
