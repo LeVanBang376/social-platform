@@ -2,6 +2,7 @@ package comment
 
 import (
 	"context"
+	"errors"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
@@ -11,6 +12,15 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrPostNotFound           = errors.New("post not found")
+	ErrParentCommentNotFound  = errors.New("parent comment not found")
+	ErrParentCommentWrongPost = errors.New("parent comment does not belong to this post")
+	ErrNestedReply            = errors.New("nested replies are not allowed")
+	ErrCommentNotFound        = errors.New("comment not found")
+	ErrNotCommentOwner        = errors.New("you are not allowed to modify this comment")
 )
 
 type Service struct {
@@ -43,6 +53,10 @@ func (s *Service) Create(
 		s.db,
 		postID,
 	); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+
 		return nil, err
 	}
 
@@ -54,17 +68,21 @@ func (s *Service) Create(
 			*req.ParentCommentID,
 		)
 		if err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return nil, ErrParentCommentNotFound
+			}
+
 			return nil, err
 		}
 
 		// Parent comment must belong to the same post.
 		if parentComment.PostID != postID {
-			return nil, gorm.ErrInvalidData
+			return nil, ErrParentCommentWrongPost
 		}
 
 		// Only allow one level of replies.
 		if parentComment.ParentCommentID != nil {
-			return nil, gorm.ErrInvalidData
+			return nil, ErrNestedReply
 		}
 	}
 
@@ -179,11 +197,15 @@ func (s *Service) Update(
 		commentID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrCommentNotFound
+		}
+
 		return nil, err
 	}
 
 	if comment.UserID != userID {
-		return nil, gorm.ErrInvalidData
+		return nil, ErrNotCommentOwner
 	}
 
 	if req.Content != nil {
@@ -212,11 +234,15 @@ func (s *Service) Delete(
 		commentID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrCommentNotFound
+		}
+
 		return err
 	}
 
 	if comment.UserID != userID {
-		return gorm.ErrInvalidData
+		return ErrNotCommentOwner
 	}
 
 	return s.repository.Delete(

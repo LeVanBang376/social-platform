@@ -16,6 +16,18 @@ services:
       migrate:
         condition: service_completed_successfully
 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: social-platform-worker
+    command: ["/app/worker"]
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+
   migrate:
     image: migrate/migrate
     container_name: social-platform-migrate

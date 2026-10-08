@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 var _ = dto.CommentLikeResponse{}
@@ -74,19 +72,10 @@ func (h *CommentLikeHandler) Like(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			response.NonDataJSON(
-				c.Writer,
-				http.StatusNotFound,
-				"Comment not found",
-			)
-			return
-		}
-
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -142,7 +131,7 @@ func (h *CommentLikeHandler) Unlike(c *gin.Context) {
 		commentID,
 		userID,
 	); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentLikeService.ErrNotLiked) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -154,7 +143,7 @@ func (h *CommentLikeHandler) Unlike(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}

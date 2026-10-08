@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 var _ = dto.PostLikeResponse{}
@@ -40,6 +38,7 @@ func NewPostLikeHandler(
 // @Success      201 {object} dto.PostLikeResponse
 // @Failure      400 {object} map[string]interface{} "Bad request"
 // @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      409 {object} map[string]interface{} "Already liked"
 // @Failure      500 {object} map[string]interface{} "Internal server error"
 // @Router       /posts/{post_id}/like [post]
 func (h *PostLikeHandler) Like(c *gin.Context) {
@@ -74,10 +73,19 @@ func (h *PostLikeHandler) Like(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
+		if errors.Is(err, postLikeService.ErrAlreadyLiked) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusConflict,
+				"Post already liked",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -135,7 +143,7 @@ func (h *PostLikeHandler) Unlike(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, postLikeService.ErrNotLiked) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -147,7 +155,7 @@ func (h *PostLikeHandler) Unlike(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}

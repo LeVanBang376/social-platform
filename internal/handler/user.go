@@ -10,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type UserHandler struct {
@@ -52,11 +51,11 @@ func (h *UserHandler) Create(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
-		if err.Error() == "email already exists" {
+		if errors.Is(err, userService.ErrEmailAlreadyExists) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusConflict,
-				err.Error(),
+				"Email already exists",
 			)
 			return
 		}
@@ -64,7 +63,7 @@ func (h *UserHandler) Create(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			"Failed to create user",
+			"Internal server error",
 		)
 		return
 	}
@@ -106,7 +105,7 @@ func (h *UserHandler) FindByID(c *gin.Context) {
 		userID,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, userService.ErrUserNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -118,7 +117,7 @@ func (h *UserHandler) FindByID(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			"Failed to get user",
+			"Internal server error",
 		)
 		return
 	}
@@ -174,7 +173,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, userService.ErrUserNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -186,7 +185,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			"Failed to update user",
+			"Internal server error",
 		)
 		return
 	}

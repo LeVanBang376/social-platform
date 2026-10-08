@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 
 	"social-platform/internal/middleware"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type FollowHandler struct {
@@ -34,8 +32,7 @@ func NewFollowHandler(
 // @Security     CookieAuth
 // @Param        user_id  path  string  true  "User ID"
 // @Success      201  {object}  map[string]interface{}
-// @Failure      400  {object}  map[string]interface{}  "Invalid user ID"
-// @Failure      404  {object}  map[string]interface{}  "User not found"
+// @Failure      400  {object}  map[string]interface{}  "Invalid user ID or cannot follow yourself"
 // @Failure      409  {object}  map[string]interface{}  "Already following user"
 // @Failure      500  {object}  map[string]interface{}  "Internal server error"
 // @Router       /users/{user_id}/follow [post]
@@ -67,7 +64,7 @@ func (h *FollowHandler) Follow(c *gin.Context) {
 		followingID,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, followService.ErrCannotFollowSelf) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusBadRequest,
@@ -76,10 +73,19 @@ func (h *FollowHandler) Follow(c *gin.Context) {
 			return
 		}
 
+		if errors.Is(err, followService.ErrAlreadyFollowing) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusConflict,
+				"Already following user",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -99,10 +105,10 @@ func (h *FollowHandler) Follow(c *gin.Context) {
 // @Produce      json
 // @Security     CookieAuth
 // @Param        user_id  path  string  true  "User ID"
-// @Success      204  "Successfully unfollowed"
-// @Failure      400  {object}  map[string]interface{}  "Invalid user ID"
-// @Failure      404  {object}  map[string]interface{}  "Follow relationship not found"
-// @Failure      500  {object}  map[string]interface{}  "Internal server error"
+// @Success      200  {object} map[string]interface{} "Successfully unfollowed"
+// @Failure      400  {object} map[string]interface{}  "Invalid user ID"
+// @Failure      404  {object} map[string]interface{}  "Follow relationship not found"
+// @Failure      500  {object} map[string]interface{}  "Internal server error"
 // @Router       /users/{user_id}/follow [delete]
 func (h *FollowHandler) Unfollow(c *gin.Context) {
 	followerID := middleware.GetUserID(c)
@@ -131,10 +137,19 @@ func (h *FollowHandler) Unfollow(c *gin.Context) {
 		followerID,
 		followingID,
 	); err != nil {
+		if errors.Is(err, followService.ErrNotFollowing) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusNotFound,
+				"Follow relationship not found",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}

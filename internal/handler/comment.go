@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type CommentHandler struct {
@@ -87,7 +85,8 @@ func (h *CommentHandler) Create(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentService.ErrPostNotFound) ||
+			errors.Is(err, commentService.ErrParentCommentNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -96,11 +95,20 @@ func (h *CommentHandler) Create(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, commentService.ErrParentCommentWrongPost) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusBadRequest,
-				"Invalid parent comment",
+				"Parent comment does not belong to this post",
+			)
+			return
+		}
+
+		if errors.Is(err, commentService.ErrNestedReply) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusBadRequest,
+				"Nested replies are not allowed",
 			)
 			return
 		}
@@ -108,7 +116,7 @@ func (h *CommentHandler) Create(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -157,7 +165,7 @@ func (h *CommentHandler) FindByPostID(c *gin.Context) {
 		pagination,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentService.ErrPostNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -169,10 +177,7 @@ func (h *CommentHandler) FindByPostID(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf(
-				"Internal server error: %s",
-				err.Error(),
-			),
+			"Internal server error",
 		)
 		return
 	}
@@ -238,7 +243,7 @@ func (h *CommentHandler) FindReplies(c *gin.Context) {
 		pagination,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentService.ErrCommentNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -250,10 +255,7 @@ func (h *CommentHandler) FindReplies(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf(
-				"Internal server error: %s",
-				err.Error(),
-			),
+			"Internal server error",
 		)
 		return
 	}
@@ -327,7 +329,7 @@ func (h *CommentHandler) Update(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentService.ErrCommentNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -336,7 +338,7 @@ func (h *CommentHandler) Update(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, commentService.ErrNotCommentOwner) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
@@ -348,7 +350,7 @@ func (h *CommentHandler) Update(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -405,7 +407,7 @@ func (h *CommentHandler) Delete(c *gin.Context) {
 		commentID,
 		userID,
 	); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, commentService.ErrCommentNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -414,7 +416,7 @@ func (h *CommentHandler) Delete(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, commentService.ErrNotCommentOwner) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
@@ -426,7 +428,7 @@ func (h *CommentHandler) Delete(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}

@@ -11,6 +11,10 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o social-platform \
     ./cmd/api
 
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -o worker \
+    ./cmd/worker
+
 
 FROM alpine:3.22
 
@@ -19,6 +23,7 @@ WORKDIR /app
 RUN apk --no-cache add ca-certificates
 
 COPY --from=builder /app/social-platform .
+COPY --from=builder /app/worker .
 COPY --from=builder /app/migrations ./migrations
 
 EXPOSE 8080

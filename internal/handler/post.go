@@ -2,7 +2,6 @@ package handler
 
 import (
 	"errors"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,7 +12,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type PostHandler struct {
@@ -73,7 +71,7 @@ func (h *PostHandler) Create(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -117,7 +115,7 @@ func (h *PostHandler) FindByID(c *gin.Context) {
 		postID,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, postService.ErrPostNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -129,7 +127,7 @@ func (h *PostHandler) FindByID(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -178,7 +176,7 @@ func (h *PostHandler) FindByUserID(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -252,7 +250,7 @@ func (h *PostHandler) Update(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, postService.ErrPostNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -261,7 +259,7 @@ func (h *PostHandler) Update(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, postService.ErrNotPostOwner) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
@@ -273,7 +271,7 @@ func (h *PostHandler) Update(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}
@@ -330,7 +328,7 @@ func (h *PostHandler) Delete(c *gin.Context) {
 		postID,
 		userID,
 	); err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
+		if errors.Is(err, postService.ErrPostNotFound) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusNotFound,
@@ -339,7 +337,7 @@ func (h *PostHandler) Delete(c *gin.Context) {
 			return
 		}
 
-		if errors.Is(err, gorm.ErrInvalidData) {
+		if errors.Is(err, postService.ErrNotPostOwner) {
 			response.NonDataJSON(
 				c.Writer,
 				http.StatusForbidden,
@@ -351,7 +349,7 @@ func (h *PostHandler) Delete(c *gin.Context) {
 		response.NonDataJSON(
 			c.Writer,
 			http.StatusInternalServerError,
-			fmt.Sprintf("Internal server error: %s", err.Error()),
+			"Internal server error",
 		)
 		return
 	}

@@ -12,8 +12,11 @@ import (
 	"gorm.io/gorm"
 )
 
-var ErrAlreadyFollowing = errors.New("Already following user")
-var ErrNotFollowing = errors.New("Not following user")
+var (
+	ErrAlreadyFollowing = errors.New("already following user")
+	ErrNotFollowing     = errors.New("not following user")
+	ErrCannotFollowSelf = errors.New("cannot follow yourself")
+)
 
 type Service struct {
 	db         *gorm.DB
@@ -36,7 +39,7 @@ func (s *Service) Follow(
 	followingID uuid.UUID,
 ) (*dto.FollowResponse, error) {
 	if followerID == followingID {
-		return nil, gorm.ErrInvalidData
+		return nil, ErrCannotFollowSelf
 	}
 
 	follow := &model.Follow{

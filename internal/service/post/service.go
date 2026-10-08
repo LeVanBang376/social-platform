@@ -3,6 +3,7 @@ package post
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -15,6 +16,11 @@ import (
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrPostNotFound = errors.New("post not found")
+	ErrNotPostOwner = errors.New("you are not allowed to modify this post")
 )
 
 type Service struct {
@@ -61,10 +67,15 @@ func (s *Service) FindByID(
 	postID int64,
 ) (*dto.PostResponse, error) {
 	redisKey := fmt.Sprintf("post:%d", postID)
-	data, err := s.redisClient.Get(ctx, redisKey).Bytes()
+
+	data, err := s.redisClient.Get(
+		ctx,
+		redisKey,
+	).Bytes()
 
 	if err == nil {
 		var res dto.PostResponse
+
 		if err := json.Unmarshal(data, &res); err != nil {
 			return nil, err
 		}
@@ -76,13 +87,17 @@ func (s *Service) FindByID(
 		return nil, err
 	}
 
-	// Cache miss
+	// Cache miss.
 	post, err := s.repository.FindByID(
 		ctx,
 		s.db,
 		postID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+
 		return nil, err
 	}
 
@@ -99,7 +114,16 @@ func (s *Service) FindByID(
 	if err != nil {
 		return nil, err
 	}
-	_ = s.redisClient.Set(ctx, redisKey, redisData, 10*time.Minute).Err()
+
+	if err := s.redisClient.Set(
+		ctx,
+		redisKey,
+		redisData,
+		10*time.Minute,
+	).Err(); err != nil {
+		// Cache failure should not make the request fail.
+		log.Printf("failed to set post cache: %v", err)
+	}
 
 	return &res, nil
 }
@@ -154,12 +178,16 @@ func (s *Service) Update(
 		postID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrPostNotFound
+		}
+
 		return nil, err
 	}
 
 	// Only the post owner can update it.
 	if post.UserID != userID {
-		return nil, gorm.ErrInvalidData
+		return nil, ErrNotPostOwner
 	}
 
 	if req.Content != nil {
@@ -174,8 +202,13 @@ func (s *Service) Update(
 		return nil, err
 	}
 
+	// Invalidate cache after updating the post.
 	redisKey := fmt.Sprintf("post:%d", postID)
-	if err := s.redisClient.Del(ctx, redisKey).Err(); err != nil {
+
+	if err := s.redisClient.Del(
+		ctx,
+		redisKey,
+	).Err(); err != nil {
 		log.Printf("failed to delete post cache: %v", err)
 	}
 
@@ -200,17 +233,35 @@ func (s *Service) Delete(
 		postID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrPostNotFound
+		}
+
 		return err
 	}
 
 	// Only the post owner can delete it.
 	if post.UserID != userID {
-		return gorm.ErrInvalidData
+		return ErrNotPostOwner
 	}
 
-	return s.repository.Delete(
+	if err := s.repository.Delete(
 		ctx,
 		s.db,
 		post.PostID,
-	)
+	); err != nil {
+		return err
+	}
+
+	// Invalidate cache after deleting the post.
+	redisKey := fmt.Sprintf("post:%d", postID)
+
+	if err := s.redisClient.Del(
+		ctx,
+		redisKey,
+	).Err(); err != nil {
+		log.Printf("failed to delete post cache: %v", err)
+	}
+
+	return nil
 }

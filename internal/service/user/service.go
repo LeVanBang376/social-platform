@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"errors"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
@@ -10,6 +11,11 @@ import (
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrUserNotFound       = errors.New("user not found")
+	ErrEmailAlreadyExists = errors.New("email already exists")
 )
 
 type Service struct {
@@ -52,6 +58,10 @@ func (s *Service) Create(
 		s.db,
 		user,
 	); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, ErrEmailAlreadyExists
+		}
+
 		return nil, err
 	}
 
@@ -68,6 +78,10 @@ func (s *Service) FindByID(
 		userID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, err
 	}
 
@@ -85,6 +99,10 @@ func (s *Service) Update(
 		userID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, err
 	}
 

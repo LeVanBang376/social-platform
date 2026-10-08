@@ -1,13 +1,13 @@
 package handler
 
 import (
+	"errors"
 	"net/http"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/middleware"
-	authService "social-platform/internal/service/auth"
-
 	"social-platform/internal/response"
+	authService "social-platform/internal/service/auth"
 
 	"github.com/gin-gonic/gin"
 )
@@ -59,15 +59,28 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		&req,
 	)
 	if err != nil {
+		if errors.Is(err, authService.ErrInvalidCredentials) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusUnauthorized,
+				"Invalid email or password",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
-			http.StatusUnauthorized,
-			err.Error(),
+			http.StatusInternalServerError,
+			"Internal server error",
 		)
 		return
 	}
 
-	h.setAuthCookies(c, res.AccessToken, res.RefreshToken)
+	h.setAuthCookies(
+		c,
+		res.AccessToken,
+		res.RefreshToken,
+	)
 
 	response.JSON(
 		c.Writer,
@@ -104,10 +117,19 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		claims.UserID,
 	)
 	if err != nil {
+		if errors.Is(err, authService.ErrUserNotFound) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusUnauthorized,
+				"Unauthorized",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
-			http.StatusUnauthorized,
-			"Unauthorized",
+			http.StatusInternalServerError,
+			"Internal server error",
 		)
 		return
 	}
@@ -145,15 +167,31 @@ func (h *AuthHandler) Refresh(c *gin.Context) {
 		refreshToken,
 	)
 	if err != nil {
+		if errors.Is(err, authService.ErrInvalidRefreshToken) ||
+			errors.Is(err, authService.ErrRefreshTokenRevoked) ||
+			errors.Is(err, authService.ErrRefreshTokenExpired) ||
+			errors.Is(err, authService.ErrUserNotFound) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusUnauthorized,
+				"Unauthorized",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
-			http.StatusUnauthorized,
-			err.Error(),
+			http.StatusInternalServerError,
+			"Internal server error",
 		)
 		return
 	}
 
-	h.setAuthCookies(c, res.AccessToken, res.RefreshToken)
+	h.setAuthCookies(
+		c,
+		res.AccessToken,
+		res.RefreshToken,
+	)
 
 	response.NonDataJSON(
 		c.Writer,
@@ -193,54 +231,6 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		c.Writer,
 		http.StatusOK,
 		"Logout successful",
-	)
-}
-
-func (h *AuthHandler) setAuthCookies(
-	c *gin.Context,
-	accessToken string,
-	refreshToken string,
-) {
-	c.SetCookie(
-		accessTokenCookie,
-		accessToken,
-		accessTokenMaxAge,
-		"/",
-		"",
-		false,
-		true,
-	)
-
-	c.SetCookie(
-		refreshTokenCookie,
-		refreshToken,
-		refreshTokenMaxAge,
-		"/",
-		"",
-		false,
-		true,
-	)
-}
-
-func (h *AuthHandler) clearAuthCookies(c *gin.Context) {
-	c.SetCookie(
-		accessTokenCookie,
-		"",
-		-1,
-		"/",
-		"",
-		false,
-		true,
-	)
-
-	c.SetCookie(
-		refreshTokenCookie,
-		"",
-		-1,
-		"/",
-		"",
-		false,
-		true,
 	)
 }
 
@@ -314,10 +304,28 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		c.Request.Context(),
 		&req,
 	); err != nil {
+		if errors.Is(err, authService.ErrInvalidEmailOrOTP) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusUnauthorized,
+				"Invalid email or OTP",
+			)
+			return
+		}
+
+		if errors.Is(err, authService.ErrInvalidOrExpiredOTP) {
+			response.NonDataJSON(
+				c.Writer,
+				http.StatusUnauthorized,
+				"Invalid or expired OTP",
+			)
+			return
+		}
+
 		response.NonDataJSON(
 			c.Writer,
-			http.StatusUnauthorized,
-			err.Error(),
+			http.StatusInternalServerError,
+			"Internal server error",
 		)
 		return
 	}
@@ -326,5 +334,53 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 		c.Writer,
 		http.StatusOK,
 		"Password reset successful",
+	)
+}
+
+func (h *AuthHandler) setAuthCookies(
+	c *gin.Context,
+	accessToken string,
+	refreshToken string,
+) {
+	c.SetCookie(
+		accessTokenCookie,
+		accessToken,
+		accessTokenMaxAge,
+		"/",
+		"",
+		false,
+		true,
+	)
+
+	c.SetCookie(
+		refreshTokenCookie,
+		refreshToken,
+		refreshTokenMaxAge,
+		"/",
+		"",
+		false,
+		true,
+	)
+}
+
+func (h *AuthHandler) clearAuthCookies(c *gin.Context) {
+	c.SetCookie(
+		accessTokenCookie,
+		"",
+		-1,
+		"/",
+		"",
+		false,
+		true,
+	)
+
+	c.SetCookie(
+		refreshTokenCookie,
+		"",
+		-1,
+		"/",
+		"",
+		false,
+		true,
 	)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -27,6 +28,16 @@ import (
 )
 
 const refreshTokenDuration = 7 * 24 * time.Hour
+
+var (
+	ErrInvalidCredentials  = errors.New("invalid email or password")
+	ErrUserNotFound        = errors.New("user not found")
+	ErrInvalidRefreshToken = errors.New("invalid refresh token")
+	ErrRefreshTokenRevoked = errors.New("refresh token has been revoked")
+	ErrRefreshTokenExpired = errors.New("refresh token has expired")
+	ErrInvalidEmailOrOTP   = errors.New("invalid email or OTP")
+	ErrInvalidOrExpiredOTP = errors.New("invalid or expired OTP")
+)
 
 type LoginResult struct {
 	AccessToken  string
@@ -76,6 +87,10 @@ func (s *Service) GetUserByID(
 		userID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, ErrUserNotFound
+		}
+
 		return nil, err
 	}
 
@@ -93,7 +108,7 @@ func (s *Service) Login(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("invalid email or password")
+			return nil, ErrInvalidCredentials
 		}
 
 		return nil, err
@@ -103,7 +118,7 @@ func (s *Service) Login(
 		[]byte(user.PasswordHash),
 		[]byte(req.Password),
 	); err != nil {
-		return nil, errors.New("invalid email or password")
+		return nil, ErrInvalidCredentials
 	}
 
 	accessToken, err := s.jwtService.GenerateToken(
@@ -184,18 +199,18 @@ func (s *Service) Refresh(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("invalid refresh token")
+			return nil, ErrInvalidRefreshToken
 		}
 
 		return nil, err
 	}
 
 	if session.RevokedAt != nil {
-		return nil, errors.New("refresh token has been revoked")
+		return nil, ErrRefreshTokenRevoked
 	}
 
 	if time.Now().After(session.ExpiresAt) {
-		return nil, errors.New("refresh token has expired")
+		return nil, ErrRefreshTokenExpired
 	}
 
 	user, err := s.userRepository.FindByID(
@@ -205,7 +220,7 @@ func (s *Service) Refresh(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("user not found")
+			return nil, ErrUserNotFound
 		}
 
 		return nil, err
@@ -271,14 +286,14 @@ func (s *Service) ForgotPassword(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			// Không reveal user có tồn tại hay không.
+			// Do not reveal whether the email exists.
 			return nil
 		}
 
 		return err
 	}
 
-	// Generate 6-digit OTP
+	// Generate 6-digit OTP.
 	n, err := rand.Int(
 		rand.Reader,
 		big.NewInt(1000000),
@@ -289,11 +304,11 @@ func (s *Service) ForgotPassword(
 
 	otp := fmt.Sprintf("%06d", n)
 
-	// Hash OTP
+	// Hash OTP.
 	hash := sha256.Sum256([]byte(otp))
 	otpHash := hex.EncodeToString(hash[:])
 
-	// Save OTP
+	// Save OTP.
 	resetOTP := &model.PasswordResetOTP{
 		ID:        uuid.New(),
 		UserID:    user.UserID,
@@ -309,7 +324,7 @@ func (s *Service) ForgotPassword(
 		return err
 	}
 
-	// Create email message
+	// Create email message.
 	message := email.EmailMessage{
 		To:      user.Email,
 		Subject: "Password Reset OTP",
@@ -325,7 +340,7 @@ func (s *Service) ForgotPassword(
 		return err
 	}
 
-	// Publish email job to Redis Stream
+	// Publish email job to Redis Stream.
 	if err := s.redisClient.XAdd(
 		ctx,
 		&redis.XAddArgs{
@@ -345,7 +360,7 @@ func (s *Service) ResetPassword(
 	ctx context.Context,
 	req *dto.ResetPasswordRequest,
 ) error {
-	// Find user
+	// Find user.
 	user, err := s.userRepository.FindByEmail(
 		ctx,
 		s.db,
@@ -353,17 +368,17 @@ func (s *Service) ResetPassword(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("invalid email or OTP")
+			return ErrInvalidEmailOrOTP
 		}
 
 		return err
 	}
 
-	// Hash OTP provided by user
+	// Hash OTP provided by user.
 	hash := sha256.Sum256([]byte(req.OTP))
 	otpHash := hex.EncodeToString(hash[:])
 
-	// Find valid OTP
+	// Find valid OTP.
 	resetOTP, err := s.passwordResetOTPRepository.FindValid(
 		ctx,
 		s.db,
@@ -372,18 +387,21 @@ func (s *Service) ResetPassword(
 	)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("invalid or expired OTP")
+			return ErrInvalidOrExpiredOTP
 		}
 
 		return err
 	}
 
-	// Compare OTP hash
-	if otpHash != resetOTP.OTPHash {
-		return errors.New("invalid or expired OTP")
+	// Compare OTP hashes using constant-time comparison.
+	if subtle.ConstantTimeCompare(
+		[]byte(otpHash),
+		[]byte(resetOTP.OTPHash),
+	) != 1 {
+		return ErrInvalidOrExpiredOTP
 	}
 
-	// Hash new password
+	// Hash new password.
 	passwordHash, err := bcrypt.GenerateFromPassword(
 		[]byte(req.NewPassword),
 		bcrypt.DefaultCost,
@@ -392,7 +410,7 @@ func (s *Service) ResetPassword(
 		return err
 	}
 
-	// Update password and mark OTP as used atomically
+	// Update password and mark OTP as used atomically.
 	err = s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := s.userRepository.UpdatePasswordHash(
 			ctx,

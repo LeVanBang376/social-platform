@@ -2,6 +2,7 @@ package comment_like
 
 import (
 	"context"
+	"errors"
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
@@ -9,6 +10,11 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrAlreadyLiked = errors.New("comment already liked")
+	ErrNotLiked     = errors.New("comment like not found")
 )
 
 type Service struct {
@@ -41,6 +47,10 @@ func (s *Service) Like(
 		s.db,
 		like,
 	); err != nil {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
+			return nil, ErrAlreadyLiked
+		}
+
 		return nil, err
 	}
 
@@ -59,6 +69,10 @@ func (s *Service) Unlike(
 		userID,
 	)
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return ErrNotLiked
+		}
+
 		return err
 	}
 
