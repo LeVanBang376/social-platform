@@ -59,6 +59,8 @@ func (s *Service) Create(
 		return nil, err
 	}
 
+	s.invalidateUserPostsCache(ctx, userID)
+
 	return dto.FromPostModelToResponse(post), nil
 }
 
@@ -133,6 +135,26 @@ func (s *Service) FindByUserID(
 	userID uuid.UUID,
 	pagination *response.Pagination,
 ) ([]*dto.PostResponse, error) {
+	redisKey := fmt.Sprintf(
+		"user:%s:posts:page:%d:per_page:%d",
+		userID,
+		pagination.Page,
+		pagination.PerPage,
+	)
+
+	data, err := s.redisClient.Get(ctx, redisKey).Bytes()
+	if err == nil {
+		var res []*dto.PostResponse
+
+		if err := json.Unmarshal(data, &res); err != nil {
+			log.Printf("failed to unmarshal post list cache: %v", err)
+		} else {
+			return res, nil
+		}
+	} else if err != redis.Nil {
+		log.Printf("failed to get post list cache: %v", err)
+	}
+
 	posts, err := s.repository.FindByUserID(
 		ctx,
 		s.db,
@@ -161,6 +183,21 @@ func (s *Service) FindByUserID(
 				CommentCount: post.CommentCount,
 			},
 		)
+	}
+
+	redisData, err := json.Marshal(responses)
+	if err != nil {
+		log.Printf("failed to marshal post list cache: %v", err)
+		return responses, nil
+	}
+
+	if err := s.redisClient.Set(
+		ctx,
+		redisKey,
+		redisData,
+		10*time.Minute,
+	).Err(); err != nil {
+		log.Printf("failed to set post list cache: %v", err)
 	}
 
 	return responses, nil
@@ -204,6 +241,7 @@ func (s *Service) Update(
 
 	// Invalidate cache after updating the post.
 	redisKey := fmt.Sprintf("post:%d", postID)
+	s.invalidateUserPostsCache(ctx, post.UserID)
 
 	if err := s.redisClient.Del(
 		ctx,
@@ -255,6 +293,7 @@ func (s *Service) Delete(
 
 	// Invalidate cache after deleting the post.
 	redisKey := fmt.Sprintf("post:%d", postID)
+	s.invalidateUserPostsCache(ctx, post.UserID)
 
 	if err := s.redisClient.Del(
 		ctx,
@@ -264,4 +303,32 @@ func (s *Service) Delete(
 	}
 
 	return nil
+}
+
+func (s *Service) invalidateUserPostsCache(
+	ctx context.Context,
+	userID uuid.UUID,
+) {
+	pattern := fmt.Sprintf("user:%s:posts:*", userID)
+
+	iter := s.redisClient.Scan(ctx, 0, pattern, 100).Iterator()
+
+	var keys []string
+
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+
+	if err := iter.Err(); err != nil {
+		log.Printf("failed to scan post list cache: %v", err)
+		return
+	}
+
+	if len(keys) == 0 {
+		return
+	}
+
+	if err := s.redisClient.Del(ctx, keys...).Err(); err != nil {
+		log.Printf("failed to invalidate post list cache: %v", err)
+	}
 }
