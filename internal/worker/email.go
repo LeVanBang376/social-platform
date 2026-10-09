@@ -142,11 +142,6 @@ func (w *EmailWorker) process(
 		return err
 	}
 
-	fmt.Printf(
-		"email message: %+v\n",
-		mes,
-	)
-
 	if err := w.emailService.Send(
 		mes.To,
 		mes.Subject,

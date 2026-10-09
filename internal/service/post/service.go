@@ -10,6 +10,7 @@ import (
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
+	redisinvalidate "social-platform/internal/redis_invalidate"
 	postRepository "social-platform/internal/repository/post"
 	"social-platform/internal/response"
 
@@ -59,7 +60,11 @@ func (s *Service) Create(
 		return nil, err
 	}
 
-	s.invalidateUserPostsCache(ctx, userID)
+	redisinvalidate.InvalidateUserPostsCache(
+		ctx,
+		s.redisClient,
+		userID,
+	)
 
 	return dto.FromPostModelToResponse(post), nil
 }
@@ -142,7 +147,11 @@ func (s *Service) FindByUserID(
 		pagination.PerPage,
 	)
 
-	data, err := s.redisClient.Get(ctx, redisKey).Bytes()
+	data, err := s.redisClient.Get(
+		ctx,
+		redisKey,
+	).Bytes()
+
 	if err == nil {
 		var res []*dto.PostResponse
 
@@ -239,16 +248,18 @@ func (s *Service) Update(
 		return nil, err
 	}
 
-	// Invalidate cache after updating the post.
-	redisKey := fmt.Sprintf("post:%d", postID)
-	s.invalidateUserPostsCache(ctx, post.UserID)
-
-	if err := s.redisClient.Del(
+	// Invalidate caches after updating the post.
+	redisinvalidate.InvalidateUserPostsCache(
 		ctx,
-		redisKey,
-	).Err(); err != nil {
-		log.Printf("failed to delete post cache: %v", err)
-	}
+		s.redisClient,
+		post.UserID,
+	)
+
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		postID,
+	)
 
 	return &dto.PostResponse{
 		PostID:       post.PostID,
@@ -291,44 +302,18 @@ func (s *Service) Delete(
 		return err
 	}
 
-	// Invalidate cache after deleting the post.
-	redisKey := fmt.Sprintf("post:%d", postID)
-	s.invalidateUserPostsCache(ctx, post.UserID)
-
-	if err := s.redisClient.Del(
+	// Invalidate caches after deleting the post.
+	redisinvalidate.InvalidateUserPostsCache(
 		ctx,
-		redisKey,
-	).Err(); err != nil {
-		log.Printf("failed to delete post cache: %v", err)
-	}
+		s.redisClient,
+		post.UserID,
+	)
+
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		postID,
+	)
 
 	return nil
-}
-
-func (s *Service) invalidateUserPostsCache(
-	ctx context.Context,
-	userID uuid.UUID,
-) {
-	pattern := fmt.Sprintf("user:%s:posts:*", userID)
-
-	iter := s.redisClient.Scan(ctx, 0, pattern, 100).Iterator()
-
-	var keys []string
-
-	for iter.Next(ctx) {
-		keys = append(keys, iter.Val())
-	}
-
-	if err := iter.Err(); err != nil {
-		log.Printf("failed to scan post list cache: %v", err)
-		return
-	}
-
-	if len(keys) == 0 {
-		return
-	}
-
-	if err := s.redisClient.Del(ctx, keys...).Err(); err != nil {
-		log.Printf("failed to invalidate post list cache: %v", err)
-	}
 }

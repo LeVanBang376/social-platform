@@ -145,11 +145,13 @@ func main() {
 
 	postLikeSvc := postLikeService.NewService(
 		database,
+		redisClient,
 		postLikeRepo,
 	)
 
 	commentSvc := commentService.NewService(
 		database,
+		redisClient,
 		commentRepo,
 		postRepo,
 	)

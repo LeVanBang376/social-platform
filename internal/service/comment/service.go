@@ -6,11 +6,13 @@ import (
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
+	redisinvalidate "social-platform/internal/redis_invalidate"
 	commentRepository "social-platform/internal/repository/comment"
 	postRepository "social-platform/internal/repository/post"
 	"social-platform/internal/response"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -25,17 +27,20 @@ var (
 
 type Service struct {
 	db             *gorm.DB
+	redisClient    *redis.Client
 	repository     *commentRepository.Repository
 	postRepository *postRepository.Repository
 }
 
 func NewService(
 	db *gorm.DB,
+	redisClient *redis.Client,
 	repository *commentRepository.Repository,
 	postRepository *postRepository.Repository,
 ) *Service {
 	return &Service{
 		db:             db,
+		redisClient:    redisClient,
 		repository:     repository,
 		postRepository: postRepository,
 	}
@@ -100,6 +105,13 @@ func (s *Service) Create(
 	); err != nil {
 		return nil, err
 	}
+
+	// Invalidate post detail cache after creating a comment.
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		postID,
+	)
 
 	return dto.FromCommentModelToResponse(comment), nil
 }
@@ -245,9 +257,20 @@ func (s *Service) Delete(
 		return ErrNotCommentOwner
 	}
 
-	return s.repository.Delete(
+	if err := s.repository.Delete(
 		ctx,
 		s.db,
 		commentID,
+	); err != nil {
+		return err
+	}
+
+	// Invalidate post detail cache after deleting a comment.
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		comment.PostID,
 	)
+
+	return nil
 }

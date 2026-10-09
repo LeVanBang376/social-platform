@@ -6,9 +6,11 @@ import (
 
 	"social-platform/internal/dto"
 	"social-platform/internal/model"
+	redisinvalidate "social-platform/internal/redis_invalidate"
 	postLikeRepository "social-platform/internal/repository/post_like"
 
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 )
 
@@ -18,17 +20,20 @@ var (
 )
 
 type Service struct {
-	db         *gorm.DB
-	repository *postLikeRepository.Repository
+	db          *gorm.DB
+	redisClient *redis.Client
+	repository  *postLikeRepository.Repository
 }
 
 func NewService(
 	db *gorm.DB,
+	redisClient *redis.Client,
 	repository *postLikeRepository.Repository,
 ) *Service {
 	return &Service{
-		db:         db,
-		repository: repository,
+		db:          db,
+		redisClient: redisClient,
+		repository:  repository,
 	}
 }
 
@@ -54,6 +59,13 @@ func (s *Service) Like(
 		return nil, err
 	}
 
+	// Invalidate post detail cache after liking.
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		postID,
+	)
+
 	return dto.FromPostLikeModelToResponse(like), nil
 }
 
@@ -76,10 +88,21 @@ func (s *Service) Unlike(
 		return err
 	}
 
-	return s.repository.Delete(
+	if err := s.repository.Delete(
 		ctx,
 		s.db,
 		like.PostID,
 		like.UserID,
+	); err != nil {
+		return err
+	}
+
+	// Invalidate post detail cache after unliking.
+	redisinvalidate.InvalidatePostDetailCache(
+		ctx,
+		s.redisClient,
+		postID,
 	)
+
+	return nil
 }
