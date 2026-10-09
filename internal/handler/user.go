@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"social-platform/internal/dto"
+	"social-platform/internal/middleware"
 	"social-platform/internal/response"
 	userService "social-platform/internal/service/user"
 
@@ -130,28 +131,28 @@ func (h *UserHandler) FindByID(c *gin.Context) {
 	)
 }
 
-// Update godoc
-// @Summary      Update user
-// @Description  Update user information
+// UpdateMe godoc
+// @Summary      Update current user
+// @Description  Update authenticated user information
 // @Tags         Users
 // @Accept       json
 // @Produce      json
-// @Param        user_id  path      string                 true  "User ID"
-// @Param        request  body      dto.UpdateUserRequest  true  "User information"
-// @Success      200      {object}  dto.UserResponse
-// @Failure      400      {object}  map[string]interface{}  "Invalid request"
-// @Failure      404      {object}  map[string]interface{}  "User not found"
-// @Failure      500      {object}  map[string]interface{}  "Internal server error"
-// @Router       /users/{user_id} [put]
-func (h *UserHandler) Update(c *gin.Context) {
-	userID, err := uuid.Parse(
-		c.Param("user_id"),
-	)
-	if err != nil {
+// @Param        request body dto.UpdateUserRequest true "User information"
+// @Success      200 {object} dto.UserResponse
+// @Failure      400 {object} map[string]interface{} "Invalid request"
+// @Failure      401 {object} map[string]interface{} "Unauthorized"
+// @Failure      404 {object} map[string]interface{} "User not found"
+// @Failure      500 {object} map[string]interface{} "Internal server error"
+// @Router       /users/me [patch]
+// @Security     CookieAuth
+func (h *UserHandler) UpdateMe(c *gin.Context) {
+	userID := middleware.GetUserID(c)
+
+	if userID == uuid.Nil {
 		response.NonDataJSON(
 			c.Writer,
-			http.StatusBadRequest,
-			"Invalid user ID",
+			http.StatusUnauthorized,
+			"Unauthorized",
 		)
 		return
 	}
@@ -193,7 +194,7 @@ func (h *UserHandler) Update(c *gin.Context) {
 	response.JSON(
 		c.Writer,
 		http.StatusOK,
-		"User updated successfully",
+		"Update user successful",
 		user,
 	)
 }

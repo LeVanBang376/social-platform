@@ -894,6 +894,11 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "409":
+          description: Already liked
+          schema:
+            additionalProperties: true
+            type: object
         "500":
           description: Internal server error
           schema:
@@ -975,47 +980,6 @@ paths:
       summary: Get user by ID
       tags:
       - Users
-    put:
-      consumes:
-      - application/json
-      description: Update user information
-      parameters:
-      - description: User ID
-        in: path
-        name: user_id
-        required: true
-        type: string
-      - description: User information
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/social-platform_internal_dto.UpdateUserRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/social-platform_internal_dto.UserResponse'
-        "400":
-          description: Invalid request
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: User not found
-          schema:
-            additionalProperties: true
-            type: object
-        "500":
-          description: Internal server error
-          schema:
-            additionalProperties: true
-            type: object
-      summary: Update user
-      tags:
-      - Users
   /users/{user_id}/follow:
     delete:
       description: Unfollow another user
@@ -1028,8 +992,11 @@ paths:
       produces:
       - application/json
       responses:
-        "204":
+        "200":
           description: Successfully unfollowed
+          schema:
+            additionalProperties: true
+            type: object
         "400":
           description: Invalid user ID
           schema:
@@ -1067,12 +1034,7 @@ paths:
             additionalProperties: true
             type: object
         "400":
-          description: Invalid user ID
-          schema:
-            additionalProperties: true
-            type: object
-        "404":
-          description: User not found
+          description: Invalid user ID or cannot follow yourself
           schema:
             additionalProperties: true
             type: object
@@ -1130,6 +1092,50 @@ paths:
       summary: Get posts by user
       tags:
       - Posts
+  /users/me:
+    patch:
+      consumes:
+      - application/json
+      description: Update authenticated user information
+      parameters:
+      - description: User information
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/social-platform_internal_dto.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/social-platform_internal_dto.UserResponse'
+        "400":
+          description: Invalid request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: User not found
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal server error
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - CookieAuth: []
+      summary: Update current user
+      tags:
+      - Users
 securityDefinitions:
   CookieAuth:
     in: cookie

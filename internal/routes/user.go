@@ -20,6 +20,6 @@ func RegisterUserRoutes(
 	protected := users.Group("")
 	protected.Use(authMiddleware)
 	{
-		protected.PUT("/:user_id", handler.Update)
+		protected.PATCH("/me", handler.UpdateMe)
 	}
 }
